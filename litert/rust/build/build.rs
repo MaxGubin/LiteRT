@@ -178,6 +178,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Add the include path so clang can find dependent headers
         .clang_arg(format!("-I{}", litert_source_dir.display()))
         .clang_arg(format!("-I{}", litert_include_dir.display()))
+        .clang_arg("-DLITERT_DISABLE_OPENCL_SUPPORT=1")
+        .clang_arg("-DLITERT_DISABLE_GPU=1")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("Unable to generate bindings");
