@@ -28,7 +28,8 @@ const RUST_LITERT_RUNTIME_LIBRARY_DIR: &str = "RUST_LITERT_RUNTIME_LIBRARY_DIR";
 
 // The URL of LiterRT release archive on Github.
 const LITERT_RELEASE_ARCHIVE_URL: &str =
-    "https://github.com/google-ai-edge/LiteRT/archive/refs/heads/main.zip";
+//    "https://github.com/google-ai-edge/LiteRT/archive/refs/heads/main.zip";
+"https://github.com/MaxGubin/LiteRT/archive/refs/heads/main.zip";
 
 // Different paths that are used during the binary build process.
 const DOCKER_BUILD_SCRIPT_PATH: &str = "docker_build/build_with_docker.sh";
@@ -39,6 +40,7 @@ const DOCKER_BUILT_RUNTIME_LIBRARY_DIR: &str =
 // Different paths related to preparing sources
 const BUILD_CONFIG_H_IN: &str = "build/build_config.h";
 const BUILD_CONFIG_H_OUT: &str = "litert/build_common/build_config.h";
+const BUILD_INCLUDE_PATH:&str = "litert/rust";
 
 // A helper macro to panic with a clear message if a command fails
 macro_rules! run_command {
@@ -141,7 +143,7 @@ fn get_litert_runtime_library(
         println!("Using LiteRT runtime library from {}", litert_dir);
         return Ok(PathBuf::from(litert_dir));
     }
-    println!("Building LiteRT runtime library with docker...");
+    info!("Building LiteRT runtime library with docker...");
     check_tool_installed("docker")?;
 
     let build_script_path = litert_source_dir.join(DOCKER_BUILD_SCRIPT_PATH);
@@ -163,6 +165,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Manifest dir {}", manifest_dir);
     }
     let litert_source_dir = get_litert_sources()?;
+    let litert_include_dir = litert_source_dir.join(BUILD_INCLUDE_PATH);
     let litert_runtime_dir = get_litert_runtime_library(&litert_source_dir)?;
     prepare_sources(&litert_source_dir)?;
 
@@ -174,6 +177,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .header("wrapper.h")
         // Add the include path so clang can find dependent headers
         .clang_arg(format!("-I{}", litert_source_dir.display()))
+        .clang_arg(format!("-I{}", litert_include_dir.display()))
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("Unable to generate bindings");
