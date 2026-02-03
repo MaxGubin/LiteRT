@@ -160,6 +160,7 @@ fn get_litert_runtime_library(
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=build/build.rs");
+    println!("cargo:rerun-if-changed=wrapper.h");
 
     if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
         println!("Manifest dir {}", manifest_dir);
@@ -178,8 +179,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Add the include path so clang can find dependent headers
         .clang_arg(format!("-I{}", litert_source_dir.display()))
         .clang_arg(format!("-I{}", litert_include_dir.display()))
-        .clang_arg("-DLITERT_DISABLE_OPENCL_SUPPORT=1")
-        .clang_arg("-DLITERT_DISABLE_GPU=1")
+        .clang_arg("-DLITERT_DISABLE_GPU")
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("Unable to generate bindings");
@@ -188,6 +188,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Get the output directory where cargo wants us to build things
     let out_dir = PathBuf::from(env::var("OUT_DIR")?);
     let bindings_out_path = out_dir.join("bindings.rs");
+    info!("Writing binding.rs to {}", bindings_out_path.display());
     bindings.write_to_file(bindings_out_path).expect("Couldn't write bindings!");
 
     Ok(())
