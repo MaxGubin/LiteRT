@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use build_print::{info, println};
+use build_print::info;
 use std::env;
 use std::fs::{self, File};
 use std::io::{self, copy};
@@ -28,19 +28,20 @@ const RUST_LITERT_RUNTIME_LIBRARY_DIR: &str = "RUST_LITERT_RUNTIME_LIBRARY_DIR";
 
 // The URL of LiterRT release archive on Github.
 const LITERT_RELEASE_ARCHIVE_URL: &str =
-//    "https://github.com/google-ai-edge/LiteRT/archive/refs/heads/main.zip";
-"https://github.com/MaxGubin/LiteRT/archive/refs/heads/main.zip";
+    //    "https://github.com/google-ai-edge/LiteRT/archive/refs/heads/main.zip";
+    "https://github.com/MaxGubin/LiteRT/archive/refs/heads/main.zip";
 
 // Different paths that are used during the binary build process.
 const DOCKER_BUILD_SCRIPT_PATH: &str = "docker_build/build_with_docker.sh";
 const LITERT_RUNTIME_LIBRARY_DIR: &str = "litert_runtime";
 const DOCKER_BUILT_RUNTIME_LIBRARY_DIR: &str =
-    "litert_build_container:/litert_build/bazel-bin/litert/runtime/libcompiled_model.a";
+    "litert_build_container:/litert_build/bazel-bin/litert/c/libLiteRt.so";
+const LITERT_RUNTIME_LIBRARY_NAME: &str = "libLiteRt.so";
 
 // Different paths related to preparing sources
 const BUILD_CONFIG_H_IN: &str = "build/build_config.h";
 const BUILD_CONFIG_H_OUT: &str = "litert/build_common/build_config.h";
-const BUILD_INCLUDE_PATH:&str = "litert/rust";
+const BUILD_INCLUDE_PATH: &str = "litert/rust";
 
 // A helper macro to panic with a clear message if a command fails
 macro_rules! run_command {
@@ -56,13 +57,20 @@ macro_rules! run_command {
 fn check_tool_installed(tool: &str) -> Result<(), String> {
     match Command::new(tool).arg("--version").output() {
         Ok(output) if output.status.success() => Ok(()),
-        _ => Err(format!("Required tool '{}' is not installed or not in PATH.", tool)),
+        _ => Err(format!(
+            "Required tool '{}' is not installed or not in PATH.",
+            tool
+        )),
     }
 }
 
 // Helper function to download a file
 fn download_file(url: &str, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
-    let mut response = reqwest::blocking::get(url)?;
+    let client = reqwest::blocking::Client::builder()
+        .timeout(None) // Disable total request timeout
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()?;
+    let mut response = client.get(url).send()?;
     let mut dest = File::create(path)?;
     copy(&mut response, &mut dest)?;
     Ok(())
@@ -109,7 +117,10 @@ fn get_litert_sources() -> Result<PathBuf, Box<dyn std::error::Error>> {
     }
     let out_dir = PathBuf::from(env::var(OUT_DIR_ENV_VAR)?);
     let download_archive_path = out_dir.join("litert_source.zip");
-    info!("Downloading LiteRT sources to {}...", download_archive_path.display());
+    info!(
+        "Downloading LiteRT sources to {}...",
+        download_archive_path.display()
+    );
     download_file(LITERT_RELEASE_ARCHIVE_URL, &download_archive_path)?;
     info!("Unzipping LiteRT sources to {}...", out_dir.display());
     let zip_root_dir = unzip_sources(&download_archive_path, &out_dir)?;
@@ -147,31 +158,44 @@ fn get_litert_runtime_library(
     check_tool_installed("docker")?;
 
     let build_script_path = litert_source_dir.join(DOCKER_BUILD_SCRIPT_PATH);
-    run_command!(Command::new("bash").current_dir(&litert_source_dir).arg(&build_script_path));
+    run_command!(Command::new("bash")
+        .current_dir(&litert_source_dir)
+        .arg(&build_script_path));
     let out_dir = PathBuf::from(env::var("OUT_DIR")?);
+    // Create a directory where the library will be located.
     let litert_runtime_dir = out_dir.join(LITERT_RUNTIME_LIBRARY_DIR);
-    println!("Copying LiteRT runtime library built to {}", litert_runtime_dir.display());
+    if !litert_runtime_dir.exists() {
+        fs::create_dir_all(&litert_runtime_dir)?;
+    }
+    let litert_runtime_lib = litert_runtime_dir.join(LITERT_RUNTIME_LIBRARY_NAME);
+    println!(
+        "Copying LiteRT runtime library built to {}",
+        litert_runtime_dir.display()
+    );
     run_command!(Command::new("docker")
         .arg("cp")
         .arg(DOCKER_BUILT_RUNTIME_LIBRARY_DIR)
-        .arg(&litert_runtime_dir));
+        .arg(&litert_runtime_lib));
     Ok(litert_runtime_dir)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("cargo:rerun-if-changed=build/build.rs");
-    println!("cargo:rerun-if-changed=wrapper.h");
+    println!("cargo::rerun-if-changed=build/build.rs");
+    println!("cargo::rerun-if-changed=wrapper.h");
 
     if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
-        println!("Manifest dir {}", manifest_dir);
+        info!("Manifest dir {}", manifest_dir);
     }
     let litert_source_dir = get_litert_sources()?;
     let litert_include_dir = litert_source_dir.join(BUILD_INCLUDE_PATH);
     let litert_runtime_dir = get_litert_runtime_library(&litert_source_dir)?;
     prepare_sources(&litert_source_dir)?;
 
-    println!("cargo:rustc-link-search=native={}", litert_runtime_dir.display());
-    println!("cargo:rustc-link-lib=static=compiled_model");
+    println!(
+        "cargo::rustc-link-search=native={}",
+        litert_runtime_dir.display()
+    );
+    println!("cargo::rustc-link-lib=dylib=LiteRt");
 
     check_tool_installed("clang")?;
     let bindings = bindgen::Builder::default()
@@ -180,6 +204,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .clang_arg(format!("-I{}", litert_source_dir.display()))
         .clang_arg(format!("-I{}", litert_include_dir.display()))
         .clang_arg("-DLITERT_DISABLE_GPU")
+        .layout_tests(false)
+        .derive_default(true)
         .parse_callbacks(Box::new(bindgen::CargoCallbacks::new()))
         .generate()
         .expect("Unable to generate bindings");
@@ -189,7 +215,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let out_dir = PathBuf::from(env::var("OUT_DIR")?);
     let bindings_out_path = out_dir.join("bindings.rs");
     info!("Writing binding.rs to {}", bindings_out_path.display());
-    bindings.write_to_file(bindings_out_path).expect("Couldn't write bindings!");
+    bindings
+        .write_to_file(bindings_out_path)
+        .expect("Couldn't write bindings!");
+    println!("cargo::rustc-check-cfg=cfg(bindgen_rs_file, cargp_bindgen)");
+    println!("cargo::rustc-cfg=cargo_bindgen");
 
     Ok(())
 }

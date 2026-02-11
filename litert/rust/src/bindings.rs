@@ -8,6 +8,9 @@
 #[cfg(bindgen_rs_file)]
 include!(env!("BINDGEN_RS_FILE"));
 
+#[cfg(cargo_bindgen)]
+include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+
 #[cfg(test)]
 mod tests {
     use super::*;
