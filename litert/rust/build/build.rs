@@ -218,7 +218,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     bindings
         .write_to_file(bindings_out_path)
         .expect("Couldn't write bindings!");
-    println!("cargo::rustc-check-cfg=cfg(bindgen_rs_file, cargp_bindgen)");
+    println!("cargo::rustc-check-cfg=cfg(bindgen_rs_file, cargo_bindgen)");
     println!("cargo::rustc-cfg=cargo_bindgen");
 
     Ok(())

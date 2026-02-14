@@ -56,7 +56,7 @@ impl Signature<'_> {
     }
 
     /// Returns the subgraph associated with the signature.
-    pub fn subgraph(&self) -> Result<Subgraph, Error> {
+    pub fn subgraph(&self) -> Result<Subgraph<'_>, Error> {
         let mut raw_subgraph_ptr: LiteRtSubgraph = std::ptr::null_mut();
         call_check_status!(
             // SAFETY: self.raw_signature is always valid as it's initialized by a wrapper function.
@@ -64,7 +64,10 @@ impl Signature<'_> {
             unsafe { LiteRtGetSignatureSubgraph(self.raw_signature, &mut raw_subgraph_ptr) },
             ErrorCause::GetSignatureSubgraph
         );
-        Ok(Subgraph { raw_subgraph: raw_subgraph_ptr, _phantom: PhantomData {} })
+        Ok(Subgraph {
+            raw_subgraph: raw_subgraph_ptr,
+            _phantom: PhantomData {},
+        })
     }
 
     /// Returns the number of inputs of the signature.
@@ -79,7 +82,7 @@ impl Signature<'_> {
     }
 
     /// Returns an iterator over the input names of the signature.
-    pub fn input_names(&self) -> Result<InputOutputNamesIterator, Error> {
+    pub fn input_names(&self) -> Result<InputOutputNamesIterator<'_>, Error> {
         let num_inputs = self.num_inputs()?;
         Ok(InputOutputNamesIterator {
             signature: self,
@@ -101,7 +104,7 @@ impl Signature<'_> {
     }
 
     /// Returns an iterator over the output names of the signature.
-    pub fn output_names(&self) -> Result<InputOutputNamesIterator, Error> {
+    pub fn output_names(&self) -> Result<InputOutputNamesIterator<'_>, Error> {
         let num_outputs = self.num_outputs()?;
         Ok(InputOutputNamesIterator {
             signature: self,
@@ -174,7 +177,10 @@ impl<'a> Iterator for SignatureIterator<'a> {
                 return Some(Err(Error::new(ErrorCause::GetSignature, status)));
             }
         }
-        Some(Ok(Signature { raw_signature: raw_signature_ptr, _phantom: PhantomData {} }))
+        Some(Ok(Signature {
+            raw_signature: raw_signature_ptr,
+            _phantom: PhantomData {},
+        }))
     }
     fn size_hint(&self) -> (usize, Option<usize>) {
         (self.total_num_signatures, Some(self.total_num_signatures))
@@ -282,7 +288,7 @@ impl<'a> Subgraph<'a> {
         Ok(num_outputs)
     }
 
-    fn input_tensor(&self, tensor_index: LiteRtParamIndex) -> Result<Tensor, Error> {
+    fn input_tensor(&self, tensor_index: LiteRtParamIndex) -> Result<Tensor<'_>, Error> {
         let mut raw_tensor_ptr: LiteRtTensor = std::ptr::null_mut();
         call_check_status!(
             // SAFETY: self.raw_subgraph is always valid as it's initialized by a wrapper function.
@@ -290,11 +296,14 @@ impl<'a> Subgraph<'a> {
             unsafe { LiteRtGetSubgraphInput(self.raw_subgraph, tensor_index, &mut raw_tensor_ptr) },
             ErrorCause::GetSubgraphInput
         );
-        Ok(Tensor { raw_tensor: raw_tensor_ptr, _phantom: PhantomData {} })
+        Ok(Tensor {
+            raw_tensor: raw_tensor_ptr,
+            _phantom: PhantomData {},
+        })
     }
 
     /// Returns the input tensor with the given name.
-    pub fn input_tensor_by_name(&self, tensor_name: &str) -> Result<Tensor, Error> {
+    pub fn input_tensor_by_name(&self, tensor_name: &str) -> Result<Tensor<'_>, Error> {
         let num_inputs = self.num_inputs()?;
         for i in 0..num_inputs {
             let tensor = self.input_tensor(i)?;
@@ -308,7 +317,7 @@ impl<'a> Subgraph<'a> {
         ));
     }
 
-    fn output_tensor(&self, tensor_index: LiteRtParamIndex) -> Result<Tensor, Error> {
+    fn output_tensor(&self, tensor_index: LiteRtParamIndex) -> Result<Tensor<'_>, Error> {
         let mut raw_tensor_ptr: LiteRtTensor = std::ptr::null_mut();
         call_check_status!(
             // SAFETY: self.raw_subgraph is always valid as it's initialized by a wrapper function.
@@ -318,11 +327,14 @@ impl<'a> Subgraph<'a> {
             },
             ErrorCause::GetSubgraphOutput
         );
-        Ok(Tensor { raw_tensor: raw_tensor_ptr, _phantom: PhantomData {} })
+        Ok(Tensor {
+            raw_tensor: raw_tensor_ptr,
+            _phantom: PhantomData {},
+        })
     }
 
     /// Returns the output tensor with the given name.
-    pub fn output_tensor_by_name(&self, tensor_name: &str) -> Result<Tensor, Error> {
+    pub fn output_tensor_by_name(&self, tensor_name: &str) -> Result<Tensor<'_>, Error> {
         let num_inputs = self.num_inputs()?;
         for i in 0..num_inputs {
             let tensor = self.output_tensor(i)?;
@@ -349,7 +361,9 @@ impl Model {
             unsafe { LiteRtCreateModelFromFile(c_ptr, &mut raw_model_ptr) },
             ErrorCause::CreateModelFromFile
         );
-        Ok(Model { raw_model: raw_model_ptr })
+        Ok(Model {
+            raw_model: raw_model_ptr,
+        })
     }
 
     /// Creates a model from a memory buffer.
@@ -366,7 +380,9 @@ impl Model {
             },
             ErrorCause::CreateModelFromBuffer
         );
-        Ok(Model { raw_model: raw_model_ptr })
+        Ok(Model {
+            raw_model: raw_model_ptr,
+        })
     }
 
     /// Returns the number of subgraphs in the model.
@@ -393,7 +409,7 @@ impl Model {
     }
 
     /// Returns an iterator over the signatures of the model.
-    pub fn signatures(&self) -> Result<SignatureIterator, Error> {
+    pub fn signatures(&self) -> Result<SignatureIterator<'_>, Error> {
         Ok(SignatureIterator {
             model: self,
             index: 0,
@@ -402,7 +418,7 @@ impl Model {
     }
 
     /// Returns the signature at the given index.
-    pub fn signature(&self, index: LiteRtParamIndex) -> Result<Signature, Error> {
+    pub fn signature(&self, index: LiteRtParamIndex) -> Result<Signature<'_>, Error> {
         let mut raw_signature_ptr: LiteRtSignature = std::ptr::null_mut();
         call_check_status!(
             // SAFETY: self.raw_model is always valid as it's initialized by a wrapper function.
@@ -410,7 +426,10 @@ impl Model {
             unsafe { LiteRtGetModelSignature(self.raw_model, index, &mut raw_signature_ptr) },
             ErrorCause::GetModelSignature
         );
-        Ok(Signature { raw_signature: raw_signature_ptr, _phantom: PhantomData })
+        Ok(Signature {
+            raw_signature: raw_signature_ptr,
+            _phantom: PhantomData,
+        })
     }
 }
 
